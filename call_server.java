@@ -66,6 +66,7 @@ public static void toSpeaker(byte soundbytes[]) {
 
         sourceDataLine.start();
 
+
         System.out.println("format? :" + sourceDataLine.getFormat());
 
         sourceDataLine.write(soundbytes, 0, soundbytes.length);
