@@ -16,63 +16,49 @@ static AudioInputStream ais;
 static AudioFormat format;
 static boolean status = true;
 static int port = 50005;
-static int sampleRate = 44100;
+static int sampleRate = 16000;
+
+static DataLine.Info dataLineInfo;
+static SourceDataLine sourceDataLine;
 
 public static void main(String args[]) throws Exception {
 
+    DatagramSocket serverSocket = new DatagramSocket(port);
 
-    DatagramSocket serverSocket = new DatagramSocket(50005);
+    /**
+     * Formula for lag = (byte_size/sample_rate)*2
+     * Byte size 9728 will produce ~ 0.45 seconds of lag. Voice slightly broken.
+     * Byte size 1400 will produce ~ 0.06 seconds of lag. Voice extremely broken.
+     * Byte size 4000 will produce ~ 0.18 seconds of lag. Voice slightly more broken then 9728.
+     */
 
-
-    byte[] receiveData = new byte[1280];
-    // ( 1280 for 16 000Hz and 3584 for 44 100Hz (use AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat) to get the correct size)
+    byte[] receiveData = new byte[4096];
 
     format = new AudioFormat(sampleRate, 16, 1, true, false);
+    dataLineInfo = new DataLine.Info(SourceDataLine.class, format);
+    sourceDataLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
+    sourceDataLine.open(format);
+    sourceDataLine.start();
 
+    FloatControl volumeControl = (FloatControl) sourceDataLine.getControl(FloatControl.Type.MASTER_GAIN);
+    volumeControl.setValue(1.00f);
+
+    DatagramPacket receivePacket = new DatagramPacket(receiveData,
+            receiveData.length);
+    ByteArrayInputStream baiss = new ByteArrayInputStream(
+            receivePacket.getData());
     while (status == true) {
-        DatagramPacket receivePacket = new DatagramPacket(receiveData,
-                receiveData.length);
-
         serverSocket.receive(receivePacket);
-
-        ByteArrayInputStream baiss = new ByteArrayInputStream(
-                receivePacket.getData());
-
         ais = new AudioInputStream(baiss, format, receivePacket.getLength());
-
-        // A thread solve the problem of chunky audio
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                toSpeaker(receivePacket.getData(), sourceDataLine);
-            }
-        }).start();
+        toSpeaker(receivePacket.getData());
     }
+    sourceDataLine.drain();
+    sourceDataLine.close();
 }
 
 public static void toSpeaker(byte soundbytes[]) {
     try {
-
-        DataLine.Info dataLineInfo = new DataLine.Info(SourceDataLine.class, format);
-        SourceDataLine sourceDataLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
-
-        sourceDataLine.open(format);
-
-        FloatControl volumeControl = (FloatControl) sourceDataLine.getControl(FloatControl.Type.MASTER_GAIN);
-        volumeControl.setValue(100.0f);
-
-        sourceDataLine.start();
-        sourceDataLine.open(format);
-
-        sourceDataLine.start();
-
-
-        System.out.println("format? :" + sourceDataLine.getFormat());
-
         sourceDataLine.write(soundbytes, 0, soundbytes.length);
-        System.out.println(soundbytes.toString());
-        sourceDataLine.drain();
-        sourceDataLine.close();
     } catch (Exception e) {
         System.out.println("Not working in speakers...");
         e.printStackTrace();
